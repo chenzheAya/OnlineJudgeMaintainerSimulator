@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OJ 运维模拟器 2013 (最终版)</title>
+    <style>
+        :root {
+            --bg-color: #1a1a2e;
+            --panel-bg: #16213e;
+            --accent: #0f3460;
+            --text: #e94560;
+            --text-light: #f1f1f1;
+            --success: #4caf50;
+            --warning: #ff9800;
+            --danger: #f44336;
+            --border: #333;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-light);
+            margin: 0;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-color); }
+        ::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+        
+        #sidebar {
+            width: 350px;
+            background-color: var(--panel-bg);
+            padding: 20px;
+            overflow-y: auto;
+            border-right: 1px solid var(--border);
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        #main {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        h2, h3 { margin: 0 0 8px 0; color: var(--text); font-size: 1.1em; border-bottom: 1px solid #333; padding-bottom: 5px; }
+        .stat-box {
+            background: rgba(0,0,0,0.2);
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 0.9em;
+        }
+        .stat-row { display: flex; justify-content: space-between; margin-bottom: 4px; align-items: center; }
+        .stat-val { font-weight: bold; color: #4fc3f7; font-family: monospace; font-size: 1.1em; }
+        .sub-text { font-size: 0.8em; color: #888; }
+        
+        .forecast-row { display: flex; justify-content: space-between; font-size: 0.85em; color: #aaa; border-bottom: 1px dashed #333; padding: 2px 0; }
+        .forecast-val { font-family: monospace; }
+        .income { color: #69f0ae; }
+        .expense { color: #ff5252; }
+
+        button {
+            background-color: var(--accent);
+            color: white;
+            border: 1px solid #444;
+            padding: 8px 12px;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.2s;
+            margin: 4px 4px 4px 0;
+            font-size: 0.9em;
+        }
+        button:hover { background-color: var(--text); transform: translateY(-1px); }
+        button:disabled { background-color: #333; cursor: not-allowed; opacity: 0.6; transform: none; }
+        
+        .tabs { display: flex; border-bottom: 2px solid #333; margin-bottom: 15px; }
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px 8px 0 0;
+            margin-right: 4px;
+        }
+        .tab.active { background: var(--text); color: white; font-weight: bold; }
+        
+        .panel { display: none; animation: fadeIn 0.3s; }
+        .panel.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .action-card {
+            background: var(--panel-bg);
+            border: 1px solid var(--border);
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+        }
+        
+        #log-area {
+            height: 200px;
+            background: #111;
+            font-family: 'Consolas', monospace;
+            padding: 12px;
+            overflow-y: auto;
+            border: 1px solid #333;
+            margin-top: auto;
+            color: #ccc;
+            font-size: 0.85em;
+            border-radius: 6px;
+        }
+        .log-entry { margin-bottom: 4px; border-bottom: 1px solid #222; padding-bottom: 2px;}
+        .log-bad { color: #ff5252; }
+        .log-good { color: #69f0ae; }
+        .log-warn { color: #ffd740; }
+
+        #warning-banner {
+            background-color: rgba(244, 67, 54, 0.2);
+            border: 1px solid #f44336;
+            color: #ff8a80;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 6px;
+            display: none;
+            font-weight: bold;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse { 0% { opacity: 0.8; } 50% { opacity: 1; } 100% { opacity: 0.8; } }
+
+        #next-month-btn {
+            width: 100%;
+            padding: 15px;
+            font-size: 1.2em;
+            font-weight: bold;
+            background-color: var(--success);
+            border: none;
+            margin-bottom: 10px;
+            border-radius: 8px;
+        }
+        #next-month-btn:hover { background-color: #43a047; }
+        
+        .progress-container { width: 100%; background-color: #333; height: 6px; border-radius: 3px; margin-top: 8px; overflow: hidden; }
+        .progress-bar { height: 100%; background-color: var(--success); width: 0%; transition: width 0.5s ease-out; }
+    </style>
+</head>
+<body>
+
+<div id="sidebar">
+    <div class="stat-box" style="background: var(--accent); text-align: center;">
+        <h2 style="border:none; margin:0; color:#fff;">OJ 运维模拟器</h2>
+        <div style="font-size:0.8em; opacity:0.7;">目标: 存活至 2026-01</div>
+    </div>
+
+    <div class="stat-box">
+        <div class="stat-row"><span>📅 日期</span> <span id="disp-date" class="stat-val">2013-01</span></div>
+        <div class="stat-row"><span>💰 资金</span> <span id="disp-money" class="stat-val">2000</span></div>
+        <div class="stat-row"><span>⭐ 声誉</span> <span id="disp-rep" class="stat-val">0.000</span></div>
+        <div class="progress-container"><div id="rep-bar" class="progress-bar" style="width: 50%;"></div></div>
+    </div>
+
+    <!-- 故障监控 -->
+    <div class="stat-box" style="border: 1px solid #555;">
+        <div class="stat-row"><span>⚠️ 连续故障月数</span> <span id="disp-fail-months" style="color:#aaa; font-weight:bold">0 / 6</span></div>
+        <div style="font-size:0.75em; color:#888;">若连续6个月硬盘满或服务器/评测机过载，游戏强制结束。</div>
+    </div>
+
+    <!-- 预测模块 -->
+    <h3>🔮 下月预测</h3>
+    <div class="stat-box">
+        <div class="forecast-row"><span>预计收入(低保+API)</span> <span id="fc-income" class="forecast-val income">+0</span></div>
+        <div class="forecast-row"><span>预计工资支出</span> <span id="fc-salary" class="forecast-val expense">-0</span></div>
+        <div class="forecast-row"><span>预计维护支出</span> <span id="fc-maint" class="forecast-val expense">-0</span></div>
+        <div class="stat-row" style="margin-top:5px; border-top:1px solid #444; padding-top:5px;">
+            <span>预计净收支:</span> <span id="fc-net" class="stat-val">0</span>
+        </div>
+        <div style="font-size:0.8em; color:#888; margin-top:5px;">
+            研发维护: <span id="fc-rd-cost">0</span>/月<br>
+            学术需求: <span id="fc-acad-cost">0</span>/月<br>
+            社区需求: <span id="fc-comm-cost">0</span>/月
+        </div>
+    </div>
+
+    <h3>⚡ 资源池</h3>
+    <div class="stat-box">
+        <div class="stat-row"><span>行动力 (AP)</span> <span id="disp-ap" class="stat-val" style="color: #ffca28;">100</span></div>
+        <div class="stat-row"><span>研发点</span> <span id="disp-rd" class="stat-val">0</span></div>
+        <div class="stat-row"><span>学术点</span> <span id="disp-acad" class="stat-val">0</span></div>
+        <div class="stat-row"><span>社区点</span> <span id="disp-comm" class="stat-val">0</span></div>
+    </div>
+
+    <h3>📊 运营数据</h3>
+    <div class="stat-box">
+        <div class="stat-row"><span>总用户</span> <span id="disp-users-total" class="stat-val">50</span></div>
+        <div class="stat-row"><span class="sub-text">上月新增提交</span> <span id="disp-last-subs" style="color:#fff">0</span></div>
+        <div class="stat-row"><span class="sub-text">上月新增题解</span> <span id="disp-last-sols" style="color:#fff">0</span></div>
+        <hr style="border-color:#444; margin: 8px 0;">
+        <div class="stat-row"><span>题库 (高/中/低)</span> <span><span id="disp-prob-high">0</span>/<span id="disp-prob-mid">0</span>/<span id="disp-prob-low">0</span></span></div>
+        <div class="stat-row"><span class="sub-text">硬盘占用</span> <span id="disp-disk">0 GB</span></div>
+    </div>
+
+    <h3>🖥️ 服务器</h3>
+    <div class="stat-box">
+        <div class="stat-row"><span>Web核心</span> <span><span id="disp-server-core" class="stat-val">2</span> 核</span></div>
+        <div class="stat-row"><span>评测核心</span> <span><span id="disp-judge-core" class="stat-val">1</span> 核</span></div>
+        <div class="stat-row" style="justify-content: flex-end; font-size: 0.8em; color: #888;">Web负载: <span id="disp-server-load">0</span> / <span id="disp-server-cap">0</span></div>
+    </div>
+</div>
+
+<div id="main">
+    <div id="warning-banner">⚠️ 警告：预计下个月将破产！请立即筹集资金！</div>
+    
+    <button id="next-month-btn" onclick="game.nextMonth()">进入下个月</button>
+
+    <div class="tabs">
+        <div class="tab active" onclick="ui.switchTab('ops')">日常运营</div>
+        <div class="tab" onclick="ui.switchTab('rd')">研发中心</div>
+        <div class="tab" onclick="ui.switchTab('hr')">人才招募</div>
+        <div class="tab" onclick="ui.switchTab('edu')">网校课程</div>
+    </div>
+
+    <!-- Operations Tab -->
+    <div id="tab-ops" class="panel active">
+        <div class="action-card">
+            <h3>📢 资源转化 (每次 10 AP)</h3>
+            <button onclick="game.convertAP('rd')">转研发 (+10)</button>
+            <button onclick="game.convertAP('acad')">转学术 (+10)</button>
+            <button onclick="game.convertAP('comm')">转社区 (+10)</button>
+            <button onclick="game.fundraising()" style="float:right; background:#5d4037">号召募捐 (50AP, 降声誉)</button>
+            <div style="clear:both; margin-top:5px; font-size:0.8em; color:#aaa;">
+                募捐公式: 用户数 × (声誉+1) × 4
+            </div>
+        </div>
+
+        <div class="action-card">
+            <h3>🏆 赛事运营</h3>
+            <div class="card-desc">举办比赛可提升下月用户增长速度。</div>
+            <button onclick="game.organizeContest('old')">原题赛 ($500, Acad 40)<br><span style="font-size:0.8em">Mid+4, 增长x1.05</span></button>
+            <button onclick="game.organizeContest('water')">水赛 ($1000, Acad 40)<br><span style="font-size:0.8em">Low+6, 增长x1.15</span></button>
+            <button onclick="game.organizeContest('normal')">普通赛 ($3000, Acad 80)<br><span style="font-size:0.8em">Mid+4, 增长x1.1</span></button>
+            <button onclick="game.organizeContest('grand')">优秀赛 ($8000, Acad 200)<br><span style="font-size:0.8em">High+3, 增长x1.1, 升声誉</span></button>
+        </div>
+        
+        <div class="action-card">
+            <h3>📝 题库扩充</h3>
+            <button onclick="game.addProblem('high')">高质量 (+3题, -20学术)</button>
+            <button onclick="game.addProblem('mid')">普通 (+10题, -20学术)</button>
+            <button onclick="game.addProblem('low')">低质量 (+20题, -20学术)</button>
+        </div>
+    </div>
+
+    <!-- R&D Tab -->
+    <div id="tab-rd" class="panel">
+        <div class="action-card">
+            <h3>💻 基础设施</h3>
+            <button onclick="game.expandHardware('server')">加 Web 核心 (+1)</button>
+            <button onclick="game.expandHardware('judge')">加 评测 核心 (+1)</button>
+            <button onclick="game.expandHardware('disk')">加 硬盘 (+40GB)</button>
+        </div>
+        <div class="action-card">
+            <h3>🚀 功能研发</h3>
+            <div id="rd-list"></div>
+        </div>
+        <div class="action-card">
+            <h3>🏗️ 架构升级</h3>
+            <button onclick="game.upgradeArch('server')">Web架构升级</button>
+            <button onclick="game.upgradeArch('judge')">评测架构升级</button>
+        </div>
+    </div>
+
+    <!-- HR Tab -->
+    <div id="tab-hr" class="panel">
+        <div class="action-card">
+            <h3>招聘市场 (消耗 10 AP)</h3>
+            <h4 style="margin-top:0">研发团队 (产出: <span id="out-rd">0</span>/月)</h4>
+            <button onclick="game.hire('rd_student')">高中生 ($1500, +20)</button>
+            <button onclick="game.hire('rd_uni')">大学生 ($5000, +75)</button>
+            <button onclick="game.hire('rd_full')">全职大牛 ($12000, +120)</button>
+            
+            <h4 style="margin-top:10px">学术团队 (产出: <span id="out-acad">0</span>/月)</h4>
+            <button onclick="game.hire('acad_part')">现役选手 ($500, +50)</button>
+            <button onclick="game.hire('acad_full')">全职教练 ($15000, +400)</button>
+            
+            <h4 style="margin-top:10px">社区团队 (产出: <span id="out-comm">0</span>/月)</h4>
+            <button onclick="game.hire('comm_part')">兼职版主 ($500, +50)</button>
+            <button onclick="game.hire('comm_full')">全职运营 ($7500, +400)</button>
+        </div>
+    </div>
+
+    <!-- Edu Tab -->
+    <div id="tab-edu" class="panel">
+        <div class="action-card">
+            <h3>🏫 网校管理</h3>
+            <div id="edu-list"></div>
+        </div>
+    </div>
+
+    <div id="log-area">
+        <div class="log-entry" style="color:#4fc3f7">💡 欢迎来到 OJ 运维模拟器！</div>
+        <div class="log-entry">请密切关注左侧的【下月预测】面板，避免破产。</div>
+    </div>
+</div>
+
+<script>
+const GAME_PARAMS = {
+    INITIAL: { YEAR: 2013, MONTH: 1, MONEY: 2000, AP: 100, USERS: 50, SERVER_CORES: 2, JUDGE_CORES: 1, DISK_MB: 20480 },
+    INCOME: { MONTHLY_GRANT: 500 },
+    COSTS: {
+        SERVER_CORE_RENT: 200, JUDGE_CORE_RENT: 200, DISK_BLOCK_RENT: 100, DISK_BLOCK_SIZE_GB: 40,
+        ADD_PROBLEM_ACAD: 20, HIRE_AP: 10
+    },
+    HIRING: {
+        rd_student: { name: "高中兼职", cost: 1500, gain: 20, limit: 5, type: 'rd' },
+        rd_uni:     { name: "大学兼职", cost: 5000, gain: 75, limit: 5, type: 'rd' },
+        rd_full:    { name: "全职开发", cost: 12000, gain: 120, limit: 999, type: 'rd' },
+        acad_part:  { name: "现役选手", cost: 500, gain: 50, limit: 20, type: 'acad' },
+        acad_full:  { name: "全职教练", cost: 15000, gain: 400, limit: 999, type: 'acad' },
+        comm_part:  { name: "兼职版主", cost: 500, gain: 50, limit: 5, type: 'comm' },
+        comm_full:  { name: "全职运营", cost: 7500, gain: 400, limit: 999, type: 'comm' }
+    },
+    CONTESTS: {
+        old:    { name: "原题赛", cost: 500, acad: 40, prob_mid: 4, rep_pen: 0.1, growth_mult: 1.05 },
+        water:  { name: "水赛", cost: 1000, acad: 40, prob_low: 6, rep_pen: 0.1, growth_mult: 1.15 },
+        normal: { name: "普通赛", cost: 3000, acad: 80, prob_mid: 4, growth_mult: 1.1 },
+        grand:  { name: "优秀赛", cost: 8000, acad: 200, prob_high: 3, rep_gain: 0.01, growth_mult: 1.1 }
+    },
+    FEATURES: {
+        difficulty: { id: 'difficulty', name: "难度功能", cost: 1000, rd: 100, maintain: 0, desc: "用户升级加速" },
+        solution:   { id: 'solution', name: "题解功能", cost: 1000, rd: 100, maintain: 10, desc: "用户大幅加速，产出题解" },
+        discuss:    { id: 'discuss', name: "讨论区", cost: 5000, rd: 300, maintain: 20, desc: "用户升级加速，需社区维护" },
+        team:       { id: 'team', name: "团队功能", cost: 10000, rd: 500, maintain: 30, desc: "降低服务器承载力" },
+        school:     { id: 'school', name: "网校功能", cost: 20000, rd: 800, maintain: 40, desc: "解锁网校课程" },
+        api:        { id: 'api', name: "评测API", cost: 30000, rd: 1500, maintain: 50, desc: "带来外部收入，降低承载" }
+    },
+    USER_BEHAVIOR: {
+        SUBMISSIONS: { normal: 15, active: 65, core: 300 },
+        SOLUTIONS: { normal: 0.01, active: 1, core: 5 },
+        GROWTH_FACTOR: 0.25, 
+        UPGRADE_N_A_BASE: 4, UPGRADE_N_A_MULT: 10, UPGRADE_A_C_MULT: 5
+    },
+    DISK_USAGE: { PROBLEM: 50, USER_DATA: 0.05, SUBMISSION: 0.002, SOLUTION: 0.005 },
+    CLASSES: {
+        intro: { name: "入门课", max: 3, cost_base: 3000, acad_base: 100, inc_base: 10000, req_acad: 100, req_money: 4000 },
+        basic: { name: "基础课", max: 3, cost_base: 5000, acad_base: 150, inc_base: 15000, req_acad: 150, req_money: 6000 },
+        advanced: { name: "提高课", max: 5, cost_base: 10000, acad_base: 200, inc_base: 25000, req_acad: 240, req_money: 10000 },
+        sprint: { name: "冲刺班", max: 3, cost_base: 20000, acad_base: 200, inc_base: 40000, req_acad: 200, req_money: 20000, season: [7,8,9,10] },
+        national: { name: "国赛班", max: 5, cost_base: 25000, acad_base: 300, inc_base: 50000, req_acad: 400, req_money: 40000 }
+    }
+};
+
+const game = {
+    date: { year: GAME_PARAMS.INITIAL.YEAR, month: GAME_PARAMS.INITIAL.MONTH },
+    money: GAME_PARAMS.INITIAL.MONEY,
+    ap: GAME_PARAMS.INITIAL.AP,
+    resources: { rd: 0, acad: 0, comm: 0 },
+    stats: {
+        users: { normal: GAME_PARAMS.INITIAL.USERS, active: 0, core: 0 },
+        problems: { high: 0, mid: 0, low: 0 },
+        total_submissions: 0,
+        total_solutions: 0,
+        reputation: 0,
+        last_month: { subs: 0, sols: 0 },
+        consecutive_failure_months: 0 // 新增：连续故障月数
+    },
+    hardware: {
+        server_cores: GAME_PARAMS.INITIAL.SERVER_CORES, judge_cores: GAME_PARAMS.INITIAL.JUDGE_CORES,
+        disk_extra_blocks: 0, disk_used: 0, server_arch: 1, judge_arch: 1
+    },
+    staff: {}, class_state: {}, features_unlocked: {},
+    flags: {
+        fundraising_penalty_val: 0,
+        temp_rep_penalty: 0,
+        contest_growth_mult: 1.0 // 默认为 1.0
+    },
+
+    init: function() {
+        for(let k in GAME_PARAMS.HIRING) this.staff[k] = 0;
+        for(let k in GAME_PARAMS.CLASSES) this.class_state[k] = { level: 1, cooldown: 0 };
+        for(let k in GAME_PARAMS.FEATURES) this.features_unlocked[k] = false;
+        ui.update(); ui.renderRD(); ui.renderClasses();
+    },
+
+    nextMonth: function() {
+        this.date.month++;
+        if (this.date.month > 12) { this.date.month = 1; this.date.year++; }
+        const isFreeEra = (this.date.year === 2013 && this.date.month < 7);
+        ui.log(`=== ${this.date.year}年 ${this.date.month}月 ===`, 'log-warn');
+        if (this.date.year >= 2026) { this.endGame(); return; }
+
+        this.ap = 100;
+        let salary = 0;
+        let gain = { rd: 0, acad: 0, comm: 0 };
+        for (let k in this.staff) {
+            let count = this.staff[k], conf = GAME_PARAMS.HIRING[k];
+            if (count > 0) { salary += count * conf.cost; gain[conf.type] += count * conf.gain; }
+        }
+        
+        this.money += GAME_PARAMS.INCOME.MONTHLY_GRANT;
+        this.money -= salary;
+        this.resources.rd += gain.rd; this.resources.acad += gain.acad; this.resources.comm += gain.comm;
+        
+        if(salary > 0) ui.log(`财务: 发放工资 ${salary}, 产出 R:${gain.rd} A:${gain.acad} C:${gain.comm}`);
+
+        // Maintenance
+        let maintain_rd = 0;
+        for (let k in GAME_PARAMS.FEATURES) if (this.features_unlocked[k]) maintain_rd += GAME_PARAMS.FEATURES[k].maintain;
+        maintain_rd += 20 * (this.hardware.server_arch - 1);
+        maintain_rd += 20 * (this.hardware.judge_arch - 1);
+        this.resources.rd -= maintain_rd;
+        
+        // Hardware
+        let hw_cost = this.hardware.disk_extra_blocks * GAME_PARAMS.COSTS.DISK_BLOCK_RENT;
+        if (!isFreeEra) {
+            hw_cost += this.hardware.server_cores * GAME_PARAMS.COSTS.SERVER_CORE_RENT;
+            hw_cost += this.hardware.judge_cores * GAME_PARAMS.COSTS.JUDGE_CORE_RENT;
+        }
+        this.money -= hw_cost;
+        if(hw_cost > 0) ui.log(`财务: 硬件租金 ${hw_cost}`);
+
+        // Load & API
+        let server_cap_unit = 500;
+        if (this.features_unlocked.team) server_cap_unit -= 50;
+        if (this.features_unlocked.api) server_cap_unit -= 50;
+        let server_cap = this.hardware.server_cores * server_cap_unit;
+        let judge_cap = this.hardware.judge_cores * 500;
+        let u = this.stats.users;
+        let load = u.active + (u.normal / 3) + (u.core * 3);
+        if ([7,8,9,10].includes(this.date.month)) load *= 1.3;
+        
+        if (this.features_unlocked.api) {
+            let total_u = u.normal + u.active + u.core;
+            this.money += Math.floor(total_u * 0.01);
+        }
+
+        // --- Growth Logic ---
+        let rep = this.stats.reputation;
+        let total_users = u.normal + u.active + u.core;
+        
+        let pct_rate = (rep * 8 + 4) / 100;
+        if (pct_rate < 0) pct_rate = 0;
+        let growth_from_pct = total_users * pct_rate;
+        
+        let growth_from_fixed = (rep + 1) * 50;
+        if (growth_from_fixed < 0) growth_from_fixed = 0;
+
+        let new_users = Math.floor(growth_from_pct + growth_from_fixed);
+        
+        if (this.flags.contest_growth_mult !== 1.0) {
+            new_users = Math.floor(new_users * this.flags.contest_growth_mult);
+            this.flags.contest_growth_mult = 1.0; 
+        }
+        
+        u.normal += new_users;
+        if (new_users > 0) ui.log(`用户: 新增 ${new_users} 人`);
+
+        // Flow
+        let prob_n2a = (rep * GAME_PARAMS.USER_BEHAVIOR.UPGRADE_N_A_MULT + GAME_PARAMS.USER_BEHAVIOR.UPGRADE_N_A_BASE) / 100;
+        if (this.features_unlocked.difficulty) prob_n2a *= 1.1;
+        if (this.features_unlocked.solution) prob_n2a *= 1.25;
+        if (this.features_unlocked.discuss) prob_n2a *= 1.1;
+        if (this.features_unlocked.team) prob_n2a *= 1.1;
+        
+        let delta_n2a = Math.floor(u.normal * prob_n2a);
+        if (delta_n2a > 0) { u.normal -= delta_n2a; u.active += delta_n2a; } 
+        else { let delta_a2n = Math.floor(u.active * Math.abs(prob_n2a)); u.active -= delta_a2n; u.normal += delta_a2n; }
+
+        let prob_a2c = (rep * GAME_PARAMS.USER_BEHAVIOR.UPGRADE_A_C_MULT) / 100;
+        let delta_a2c = Math.floor(u.active * prob_a2c);
+        if (delta_a2c > 0) { u.active -= delta_a2c; u.core += delta_a2c; }
+
+        // Churn
+        u.normal -= Math.ceil(u.normal / 120); u.active -= Math.ceil(u.active / 60);
+        let core_churn = Math.ceil(u.core / 36); u.core -= core_churn; u.active += core_churn;
+
+        // Data Generation
+        let subs = (u.normal * GAME_PARAMS.USER_BEHAVIOR.SUBMISSIONS.normal) +
+                   (u.active * GAME_PARAMS.USER_BEHAVIOR.SUBMISSIONS.active) +
+                   (u.core * GAME_PARAMS.USER_BEHAVIOR.SUBMISSIONS.core);
+        let subs_int = Math.floor(subs);
+        this.stats.total_submissions += subs_int;
+        this.stats.last_month.subs = subs_int; 
+        
+        let sols = 0;
+        if (this.features_unlocked.solution) {
+            sols = (u.normal * GAME_PARAMS.USER_BEHAVIOR.SOLUTIONS.normal) +
+                   (u.active * GAME_PARAMS.USER_BEHAVIOR.SOLUTIONS.active) +
+                   (u.core * GAME_PARAMS.USER_BEHAVIOR.SOLUTIONS.core);
+        }
+        let sols_int = Math.floor(sols);
+        this.stats.total_solutions += sols_int;
+        this.stats.last_month.sols = sols_int;
+
+        // Disk
+        let p = this.stats.problems;
+        let total_prob = p.high + p.mid + p.low;
+        let disk = (total_prob * GAME_PARAMS.DISK_USAGE.PROBLEM) +
+                   (total_users * GAME_PARAMS.DISK_USAGE.USER_DATA) +
+                   (this.stats.total_submissions * GAME_PARAMS.DISK_USAGE.SUBMISSION) +
+                   (this.stats.total_solutions * GAME_PARAMS.DISK_USAGE.SOLUTION);
+        this.hardware.disk_used = disk;
+        
+        let disk_cap = GAME_PARAMS.INITIAL.DISK_MB + (this.hardware.disk_extra_blocks * GAME_PARAMS.COSTS.DISK_BLOCK_SIZE_GB * 1024);
+        
+        // --- System Failure Check (New Logic) ---
+        let is_disk_full = disk > disk_cap;
+        let is_server_overload = load > server_cap;
+        let is_judge_overload = load > judge_cap;
+        
+        if (is_disk_full) ui.log("❌ 硬盘已满！数据写入失败！", "log-bad");
+        if (is_server_overload) ui.log("❌ Web服务器过载！", "log-bad");
+        if (is_judge_overload) ui.log("❌ 评测机过载！", "log-bad");
+        
+        if (is_disk_full || is_server_overload || is_judge_overload) {
+            this.stats.consecutive_failure_months++;
+            ui.log(`⚠️ 系统故障！连续故障月数: ${this.stats.consecutive_failure_months}/6`, "log-bad");
+            if (this.stats.consecutive_failure_months >= 6) {
+                alert("由于长期维护不善（连续6个月故障），你的OJ被广大用户认为无法使用，游戏结束。");
+                document.getElementById('next-month-btn').disabled = true;
+                return;
+            }
+        } else {
+            if (this.stats.consecutive_failure_months > 0) {
+                ui.log("✅ 系统状态已恢复正常，故障计数重置。", "log-good");
+            }
+            this.stats.consecutive_failure_months = 0;
+        }
+
+        // Needs & Rep
+        let acad_need = 0;
+        if (this.features_unlocked.difficulty) acad_need += total_prob * 0.05;
+        if (this.features_unlocked.solution) acad_need += total_prob * 0.1;
+        let comm_need = 0;
+        if (this.features_unlocked.discuss) comm_need += total_users * 0.01;
+        
+        this.resources.acad -= acad_need;
+        this.resources.comm -= comm_need;
+        
+        let acad_gap = (this.resources.acad < 0) ? Math.abs(this.resources.acad) : 0;
+        let comm_gap = (this.resources.comm < 0) ? Math.abs(this.resources.comm) : 0;
+        let server_gap = Math.max(0, load - server_cap);
+        let judge_gap = Math.max(0, load - judge_cap);
+        
+        this.calculateReputation(acad_gap, comm_gap, server_gap, judge_gap, total_prob);
+
+        // Cooldowns
+        for(let k in this.class_state) if (this.class_state[k].cooldown > 0) this.class_state[k].cooldown--;
+        if (this.flags.fundraising_penalty_val > 0) {
+            this.flags.fundraising_penalty_val -= (0.2 / 12);
+            if (this.flags.fundraising_penalty_val < 0) this.flags.fundraising_penalty_val = 0;
+        }
+        if (this.flags.temp_rep_penalty > 0) this.flags.temp_rep_penalty = Math.max(0, this.flags.temp_rep_penalty - (0.1/3));
+
+        if (this.money < 0) { alert("资金链断裂！您破产了！"); document.getElementById('next-month-btn').disabled = true; }
+
+        ui.update();
+    },
+
+    calculateReputation: function(acad_gap, comm_gap, server_gap, judge_gap, total_prob) {
+        let p = this.stats.problems, u = this.stats.users;
+        let r_acad = 0;
+        if (p.high > 0) r_acad += Math.log10(p.high) / 10;
+        if (total_prob > 0 && (p.high / total_prob) > 0.4) r_acad += (p.high/total_prob) - 0.4;
+        if (p.low > 0) r_acad -= Math.log10(p.low) / 10;
+        r_acad = Math.min(0.4, r_acad);
+
+        let r_users = (Math.log(Math.max(1, u.normal))/Math.log(200) + Math.log(Math.max(1, u.active))/Math.log(100) + Math.log(Math.max(1, u.core))/Math.log(50)) / 40;
+        r_users = Math.min(0.3, r_users);
+
+        let r_edu = 0;
+        r_edu += this.class_state.intro.level * 0.01;
+        r_edu += this.class_state.basic.level * 0.01;
+        r_edu += this.class_state.advanced.level * 0.02;
+        r_edu += this.class_state.sprint.level * 0.02;
+        r_edu += this.class_state.national.level * 0.02;
+        r_edu = Math.min(0.3, r_edu);
+
+        let r_stable = 0;
+        if (acad_gap > 0) r_stable -= Math.log10(acad_gap) / 20;
+        if (comm_gap > 0) r_stable -= Math.log10(comm_gap) / 20;
+        if (server_gap > 0) r_stable -= Math.log10(server_gap) / 10;
+        if (judge_gap > 0) r_stable -= Math.log10(judge_gap) / 10;
+        
+        r_stable -= this.flags.fundraising_penalty_val;
+        r_stable -= this.flags.temp_rep_penalty;
+        
+        let total = r_acad + r_users + r_edu + r_stable;
+        if (total > 1) total = 1;
+        this.stats.reputation = total;
+    },
+
+    // Actions
+    convertAP: function(target) {
+        if (this.ap < 10) { ui.log("AP不足", "log-bad"); return; }
+        this.ap -= 10; this.resources[target] += 10;
+        ui.log(`行动: 10 AP -> 10 ${target}点`); ui.update();
+    },
+
+    addProblem: function(type) {
+        if (this.resources.acad < GAME_PARAMS.COSTS.ADD_PROBLEM_ACAD) { ui.log("学术不足", "log-bad"); return; }
+        this.resources.acad -= GAME_PARAMS.COSTS.ADD_PROBLEM_ACAD;
+        if (type === 'high') this.stats.problems.high += 3;
+        if (type === 'mid') this.stats.problems.mid += 10;
+        if (type === 'low') { this.stats.problems.low += 20; this.stats.reputation -= 0.001; }
+        ui.log(`题库: 增加 ${type} 试题`); ui.update();
+    },
+
+    organizeContest: function(key) {
+        let conf = GAME_PARAMS.CONTESTS[key];
+        if (this.money < conf.cost || this.resources.acad < conf.acad) { ui.log("资源不足", "log-bad"); return; }
+        this.money -= conf.cost; this.resources.acad -= conf.acad;
+        
+        if (conf.prob_mid) this.stats.problems.mid += conf.prob_mid;
+        if (conf.prob_low) this.stats.problems.low += conf.prob_low;
+        if (conf.prob_high) this.stats.problems.high += conf.prob_high;
+        
+        if (conf.rep_pen) this.flags.temp_rep_penalty += conf.rep_pen;
+        if (conf.rep_gain) this.stats.reputation += conf.rep_gain;
+        if (conf.growth_mult) this.flags.contest_growth_mult = conf.growth_mult;
+        
+        ui.log(`比赛: ${conf.name} (下月增长 x${conf.growth_mult})`); ui.update();
+    },
+
+    fundraising: function() {
+        if (this.ap < 50) return;
+        this.ap -= 50;
+        let u = this.stats.users;
+        let total_users = u.normal + u.active + u.core;
+        let gain = Math.floor(total_users * (this.stats.reputation + 1) * 4); // Modified to *4
+        if (gain < 0) gain = 0;
+        
+        this.money += gain;
+        this.flags.fundraising_penalty_val += 0.2;
+        ui.log(`募捐: 获得 ${gain} 元，声誉受损`, "log-bad"); ui.update();
+    },
+
+    hire: function(key) {
+        if (this.ap < GAME_PARAMS.COSTS.HIRE_AP) return;
+        let conf = GAME_PARAMS.HIRING[key];
+        if (this.staff[key] >= conf.limit) { ui.log("人数已满", "log-bad"); return; }
+        this.staff[key]++; this.ap -= GAME_PARAMS.COSTS.HIRE_AP;
+        ui.log(`招聘: ${conf.name}`); ui.update();
+    },
+
+    expandHardware: function(type) {
+        if (type === 'disk') { this.hardware.disk_extra_blocks++; ui.log("硬件: 硬盘扩容"); ui.update(); return; }
+        let arch = (type === 'server') ? this.hardware.server_arch : this.hardware.judge_arch;
+        let current = (type === 'server') ? this.hardware.server_cores : this.hardware.judge_cores;
+        if (current >= (type==='server'?32:64) * arch) { ui.log("需升级架构", "log-bad"); return; }
+        if (type === 'server') this.hardware.server_cores++; else this.hardware.judge_cores++;
+        ui.log(`硬件: ${type} +1`); ui.update();
+    },
+
+    upgradeArch: function(type) {
+        let level = (type === 'server') ? this.hardware.server_arch : this.hardware.judge_arch;
+        let cost_m = 10000 * level, cost_r = 100 * level;
+        if (this.money < cost_m || this.resources.rd < cost_r) { ui.log("资源不足", "log-bad"); return; }
+        this.money -= cost_m; this.resources.rd -= cost_r;
+        if (type === 'server') this.hardware.server_arch++; else this.hardware.judge_arch++;
+        ui.log(`研发: 架构升级成功`, "log-good"); ui.update();
+    },
+
+    unlockFeature: function(id) {
+        let f = GAME_PARAMS.FEATURES[id];
+        if (this.money < f.cost || this.resources.rd < f.rd) { ui.log("资源不足", "log-bad"); return; }
+        this.money -= f.cost; this.resources.rd -= f.rd;
+        this.features_unlocked[id] = true;
+        ui.log(`解锁: ${f.name}`, "log-good");
+        ui.renderRD(); if(id==='school') ui.renderClasses(); ui.update();
+    },
+
+    runClass: function(id) {
+        let conf = GAME_PARAMS.CLASSES[id], st = this.class_state[id];
+        if (conf.season && !conf.season.includes(this.date.month)) { ui.log("季节不符", "log-bad"); return; }
+        if (st.cooldown > 0 || this.money < conf.req_money || this.resources.acad < conf.req_acad) { ui.log("无法开课", "log-bad"); return; }
+        this.money -= conf.req_money; this.resources.acad -= conf.req_acad;
+        this.money += conf.inc_base * st.level; st.cooldown = 3;
+        ui.log(`网校: ${conf.name} 开课`, "log-good"); ui.update();
+    },
+
+    upgradeClass: function(id) {
+        let conf = GAME_PARAMS.CLASSES[id], st = this.class_state[id];
+        if (st.level >= conf.max) return;
+        let cm = conf.cost_base * st.level, ca = conf.acad_base * st.level;
+        if (this.money < cm || this.resources.acad < ca) { ui.log("资源不足", "log-bad"); return; }
+        this.money -= cm; this.resources.acad -= ca; st.level++;
+        ui.log(`网校: 升级 ${conf.name}`, "log-good"); ui.renderClasses(); ui.update();
+    },
+
+    endGame: function() {
+        let u = this.stats.users, p = this.stats.problems;
+        let score = (u.core/3) + (u.active/10) + (u.normal/100) + (3*p.high + p.mid - p.low) + (0.01 * this.stats.total_solutions);
+        score *= (this.stats.reputation + 1);
+        alert(`游戏结束！最终得分: ${score.toFixed(2)}`);
+        document.getElementById('next-month-btn').disabled = true;
+    }
+};
+
+const ui = {
+    update: function() {
+        // Main Stats
+        document.getElementById('disp-date').innerText = `${game.date.year}-${String(game.date.month).padStart(2,'0')}`;
+        document.getElementById('disp-money').innerText = game.money;
+        document.getElementById('disp-rep').innerText = game.stats.reputation.toFixed(3);
+        document.getElementById('rep-bar').style.width = Math.max(0, Math.min(100, (game.stats.reputation + 1)/2*100)) + '%';
+        
+        document.getElementById('disp-ap').innerText = game.ap;
+        document.getElementById('disp-rd').innerText = Math.floor(game.resources.rd);
+        document.getElementById('disp-acad').innerText = Math.floor(game.resources.acad);
+        document.getElementById('disp-comm').innerText = Math.floor(game.resources.comm);
+        
+        let u = game.stats.users;
+        document.getElementById('disp-users-total').innerText = u.normal + u.active + u.core;
+        
+        // Failure Monitor
+        let failSpan = document.getElementById('disp-fail-months');
+        failSpan.innerText = `${game.stats.consecutive_failure_months} / 6`;
+        failSpan.style.color = game.stats.consecutive_failure_months > 0 ? '#ff5252' : '#aaa';
+
+        // Last Month Stats
+        document.getElementById('disp-last-subs').innerText = game.stats.last_month.subs.toLocaleString();
+        document.getElementById('disp-last-sols').innerText = game.stats.last_month.sols.toLocaleString();
+
+        let p = game.stats.problems;
+        document.getElementById('disp-prob-high').innerText = p.high;
+        document.getElementById('disp-prob-mid').innerText = p.mid;
+        document.getElementById('disp-prob-low').innerText = p.low;
+        
+        let disk_cap = GAME_PARAMS.INITIAL.DISK_MB + (game.hardware.disk_extra_blocks * GAME_PARAMS.COSTS.DISK_BLOCK_SIZE_GB * 1024);
+        document.getElementById('disp-disk').innerText = `${(game.hardware.disk_used/1024).toFixed(1)} / ${(disk_cap/1024).toFixed(1)} GB`;
+        
+        document.getElementById('disp-server-core').innerText = game.hardware.server_cores;
+        document.getElementById('disp-judge-core').innerText = game.hardware.judge_cores;
+        
+        let s_cap = game.hardware.server_cores * (500 - (game.features_unlocked.team?50:0) - (game.features_unlocked.api?50:0));
+        let load = Math.floor(u.active + (u.normal/3) + (u.core*3));
+        if ([7,8,9,10].includes(game.date.month)) load = Math.floor(load * 1.3);
+        
+        document.getElementById('disp-server-load').innerText = load;
+        document.getElementById('disp-server-cap').innerText = s_cap;
+
+        // --- FORECASTING LOGIC ---
+        // 1. Calculate Estimated Expenses
+        let salary = 0;
+        for (let k in game.staff) salary += game.staff[k] * GAME_PARAMS.HIRING[k].cost;
+        
+        let hw_cost = game.hardware.disk_extra_blocks * GAME_PARAMS.COSTS.DISK_BLOCK_RENT;
+        let next_month = game.date.month + 1;
+        let next_year = game.date.year;
+        if (next_month > 12) { next_month = 1; next_year++; }
+        
+        let will_charge_hw = (next_year > 2013) || (next_year === 2013 && next_month >= 7);
+        if (will_charge_hw) {
+            hw_cost += game.hardware.server_cores * GAME_PARAMS.COSTS.SERVER_CORE_RENT;
+            hw_cost += game.hardware.judge_cores * GAME_PARAMS.COSTS.JUDGE_CORE_RENT;
+        }
+        
+        let total_expense = salary + hw_cost;
+        
+        // 2. Calculate Estimated Income
+        let api_income = 0;
+        if (game.features_unlocked.api) api_income = Math.floor((u.normal+u.active+u.core) * 0.01);
+        let total_income = GAME_PARAMS.INCOME.MONTHLY_GRANT + api_income;
+        
+        // 3. Maintenance Forecast
+        let m_rd = 0, m_acad = 0, m_comm = 0;
+        for (let k in GAME_PARAMS.FEATURES) if (game.features_unlocked[k]) m_rd += GAME_PARAMS.FEATURES[k].maintain;
+        m_rd += 20 * (game.hardware.server_arch - 1) + 20 * (game.hardware.judge_arch - 1);
+        
+        let total_prob = p.high + p.mid + p.low;
+        if (game.features_unlocked.difficulty) m_acad += total_prob * 0.05;
+        if (game.features_unlocked.solution) m_acad += total_prob * 0.1;
+        if (game.features_unlocked.discuss) m_comm += (u.normal+u.active+u.core) * 0.01;
+
+        // Update Forecast UI
+        document.getElementById('fc-income').innerText = `+${total_income}`;
+        document.getElementById('fc-salary').innerText = `-${salary}`;
+        document.getElementById('fc-maint').innerText = `-${hw_cost}`;
+        
+        let net = total_income - total_expense;
+        let netEl = document.getElementById('fc-net');
+        netEl.innerText = (net >= 0 ? '+' : '') + net;
+        netEl.style.color = (net >= 0 ? '#69f0ae' : '#ff5252');
+        
+        document.getElementById('fc-rd-cost').innerText = m_rd;
+        document.getElementById('fc-acad-cost').innerText = Math.floor(m_acad);
+        document.getElementById('fc-comm-cost').innerText = Math.floor(m_comm);
+
+        // --- BANKRUPTCY CHECK ---
+        let banner = document.getElementById('warning-banner');
+        if (game.money + net < 0) {
+            banner.style.display = 'block';
+            banner.innerText = `⚠️ 严重警告：按当前收支，下个月将破产 (预计余额 ${game.money + net})！请立即筹款！`;
+        } else {
+            banner.style.display = 'none';
+        }
+
+        // Output Production
+        let staff = game.staff, h = GAME_PARAMS.HIRING;
+        document.getElementById('out-rd').innerText = staff.rd_student*h.rd_student.gain + staff.rd_uni*h.rd_uni.gain + staff.rd_full*h.rd_full.gain;
+        document.getElementById('out-acad').innerText = staff.acad_part*h.acad_part.gain + staff.acad_full*h.acad_full.gain;
+        document.getElementById('out-comm').innerText = staff.comm_part*h.comm_part.gain + staff.comm_full*h.comm_full.gain;
+    },
+    
+    log: function(msg, cls) {
+        let div = document.createElement('div');
+        div.className = 'log-entry ' + (cls||'');
+        div.innerText = `[${game.date.year}-${game.date.month}] ` + msg;
+        let area = document.getElementById('log-area');
+        area.appendChild(div);
+        area.scrollTop = area.scrollHeight;
+    },
+    
+    switchTab: function(id) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        event.target.classList.add('active');
+        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+        document.getElementById('tab-'+id).classList.add('active');
+    },
+
+    renderRD: function() {
+        let html = '';
+        for (let k in GAME_PARAMS.FEATURES) {
+            let f = GAME_PARAMS.FEATURES[k], isUn = game.features_unlocked[k];
+            let btn = isUn ? `<button disabled>✅ 已完成</button>` : `<button onclick="game.unlockFeature('${k}')">研发 ($${f.cost}, RD ${f.rd})</button>`;
+            html += `<div style="background:#222; padding:10px; margin-bottom:8px; border-radius:4px; border-left: 3px solid ${isUn?'#4caf50':'#ff9800'}"><div style="display:flex; justify-content:space-between; align-items:center"><span style="font-weight:bold">${f.name}</span>${btn}</div><div style="font-size:0.8em; color:#888; margin-top:4px">${f.desc} (维护: ${f.maintain}/月)</div></div>`;
+        }
+        document.getElementById('rd-list').innerHTML = html;
+    },
+    
+    renderClasses: function() {
+        if (!game.features_unlocked.school) { document.getElementById('edu-list').innerHTML = `<div style="color:#888;text-align:center">请先解锁网校功能</div>`; return; }
+        let html = '';
+        for(let k in GAME_PARAMS.CLASSES) {
+            let c = GAME_PARAMS.CLASSES[k], st = game.class_state[k], isMax = st.level >= c.max;
+            let runBtn = (st.cooldown > 0) ? `<button disabled>冷却 (${st.cooldown})</button>` : `<button onclick="game.runClass('${k}')" style="background:#2e7d32">开课 (+$${c.inc_base*st.level})</button>`;
+            let upBtn = isMax ? `<button disabled>已满级</button>` : `<button onclick="game.upgradeClass('${k}')">升级 ($${c.cost_base*st.level})</button>`;
+            html += `<div style="background:#222; padding:12px; margin-bottom:8px; border-radius:4px;"><div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span style="font-weight:bold; color:#f1f1f1">${c.name} <span style="color:#ffb74d">Lv.${st.level}</span></span><span style="font-size:0.8em; color:#aaa">上限 Lv.${c.max}</span></div><div style="display:flex; gap:5px;">${runBtn}${upBtn}</div></div>`;
+        }
+        document.getElementById('edu-list').innerHTML = html;
+    }
+};
+
+game.init();
+</script>
+</body>
+</html>
