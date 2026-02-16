@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OJ 运维模拟器 2013</title>
+    <title>OJ 运维模拟器 2013 </title>
     <style>
         :root {
             --bg-color: #1a1a2e;
@@ -68,15 +68,19 @@
             background-color: var(--accent);
             color: white;
             border: 1px solid #444;
-            padding: 8px 12px;
+            padding: 6px 10px;
             cursor: pointer;
             border-radius: 4px;
             transition: all 0.2s;
-            margin: 4px 4px 4px 0;
+            margin: 2px;
             font-size: 0.9em;
         }
         button:hover { background-color: var(--text); transform: translateY(-1px); }
         button:disabled { background-color: #333; cursor: not-allowed; opacity: 0.6; transform: none; }
+        
+        .btn-group { display: flex; align-items: center; margin-bottom: 6px; }
+        .btn-group label { width: 80px; font-size: 0.9em; color: #ccc; }
+        .btn-small { padding: 4px 8px; font-size: 0.8em; background-color: #444; }
         
         .tabs { display: flex; border-bottom: 2px solid #333; margin-bottom: 15px; }
         .tab {
@@ -145,7 +149,6 @@
         .progress-container { width: 100%; background-color: #333; height: 6px; border-radius: 3px; margin-top: 8px; overflow: hidden; }
         .progress-bar { height: 100%; background-color: var(--success); width: 0%; transition: width 0.5s ease-out; }
         
-        /* 网校卡片样式优化 */
         .edu-card {
             background: #222; 
             padding: 12px; 
@@ -220,6 +223,7 @@
         <div class="stat-row"><span>Web核心</span> <span><span id="disp-server-core" class="stat-val">2</span> 核 (Lv.<span id="disp-server-arch">1</span>)</span></div>
         <div class="stat-row"><span>评测核心</span> <span><span id="disp-judge-core" class="stat-val">1</span> 核 (Lv.<span id="disp-judge-arch">1</span>)</span></div>
         <div class="stat-row" style="justify-content: flex-end; font-size: 0.8em; color: #888;">Web负载: <span id="disp-server-load">0</span> / <span id="disp-server-cap">0</span></div>
+        <div class="stat-row" style="justify-content: flex-end; font-size: 0.8em; color: #888;">评测负载: <span id="disp-judge-load">0</span> / <span id="disp-judge-cap">0</span></div>
     </div>
 </div>
 
@@ -259,6 +263,7 @@
         
         <div class="action-card">
             <h3>📝 题库扩充</h3>
+            <div class="card-desc" style="font-size:0.85em; color:#aaa; margin-bottom:5px;">搬运普通/低质试题可吸引 10~50 名新用户。</div>
             <button onclick="game.addProblem('high')">高质量 (+3题, -20学术)</button>
             <button onclick="game.addProblem('mid')">普通 (+10题, -20学术)</button>
             <button onclick="game.addProblem('low')">低质量 (+20题, -20学术)</button>
@@ -269,9 +274,27 @@
     <div id="tab-rd" class="panel">
         <div class="action-card">
             <h3>💻 基础设施</h3>
-            <button onclick="game.expandHardware('server')">加 Web 核心 (+1)</button>
-            <button onclick="game.expandHardware('judge')">加 评测 核心 (+1)</button>
-            <button onclick="game.expandHardware('disk')">加 硬盘 (+40GB)</button>
+            <div style="color:#ff5252; font-size:0.85em; margin-bottom:10px; font-weight:bold;">
+                ⚠️ 注意：当核心数达到架构上限（32或64 × 架构等级）时，必须先升级架构才能继续购买。
+            </div>
+            
+            <div class="btn-group">
+                <label>Web核心:</label>
+                <button onclick="game.expandHardware('server', 1)">+1</button>
+                <button onclick="game.expandHardware('server', 10)" class="btn-small">+10</button>
+                <button onclick="game.expandHardware('server', 'max')" class="btn-small" style="background:#555">填满</button>
+            </div>
+            
+            <div class="btn-group">
+                <label>评测核心:</label>
+                <button onclick="game.expandHardware('judge', 1)">+1</button>
+                <button onclick="game.expandHardware('judge', 10)" class="btn-small">+10</button>
+                <button onclick="game.expandHardware('judge', 'max')" class="btn-small" style="background:#555">填满</button>
+            </div>
+            
+            <div class="btn-group" style="margin-top:10px">
+                <button onclick="game.expandHardware('disk')">加硬盘 (+40GB)</button>
+            </div>
         </div>
         <div class="action-card">
             <h3>🚀 功能研发</h3>
@@ -280,6 +303,10 @@
         <div class="action-card">
             <h3>🏗️ 架构升级</h3>
             <div class="card-desc">架构升级后，每个核心可额外容纳 100 活跃用户。</div>
+            <div style="font-size:0.85em; color:#aaa; margin-bottom:8px; line-height:1.5;">
+                Web下级需求: <span id="disp-up-server-cost" style="color:#ffb74d"></span><br>
+                评测下级需求: <span id="disp-up-judge-cost" style="color:#ffb74d"></span>
+            </div>
             <button onclick="game.upgradeArch('server')">Web架构升级</button>
             <button onclick="game.upgradeArch('judge')">评测架构升级</button>
         </div>
@@ -378,7 +405,9 @@ const game = {
         total_solutions: 0,
         reputation: 0,
         last_month: { subs: 0, sols: 0 },
-        consecutive_failure_months: 0
+        consecutive_failure_months: 0,
+        comm_fail_months: 0, // 新增：累计社区违规月数
+        pending_user_bonus: 0 // 新增：下月用户奖励
     },
     hardware: {
         server_cores: GAME_PARAMS.INITIAL.SERVER_CORES, judge_cores: GAME_PARAMS.INITIAL.JUDGE_CORES,
@@ -435,8 +464,7 @@ const game = {
         this.money -= hw_cost;
         if(hw_cost > 0) ui.log(`财务: 硬件租金 ${hw_cost}`);
 
-        // --- Load & API (Adjusted Logic) ---
-        // Arch Update: +100 cap per core per level above 1
+        // --- Load & API ---
         let server_arch_bonus = (this.hardware.server_arch - 1) * 100;
         let judge_arch_bonus = (this.hardware.judge_arch - 1) * 100;
 
@@ -450,10 +478,9 @@ const game = {
         let load = u.active + (u.normal / 3) + (u.core * 3);
         if ([7,8,9,10].includes(this.date.month)) load *= 1.3;
         
-        // API Income: now 1 * total_users
         if (this.features_unlocked.api) {
             let total_u = u.normal + u.active + u.core;
-            this.money += Math.floor(total_u * 1.0); // Changed from 0.01 to 1.0
+            this.money += Math.floor(total_u * 1.0); 
         }
 
         // --- Growth Logic ---
@@ -470,6 +497,13 @@ const game = {
         if (this.flags.contest_growth_mult !== 1.0) {
             new_users = Math.floor(new_users * this.flags.contest_growth_mult);
             this.flags.contest_growth_mult = 1.0; 
+        }
+        
+        // 新增：搬题奖励发放
+        if (this.stats.pending_user_bonus > 0) {
+            new_users += this.stats.pending_user_bonus;
+            ui.log(`推广: 试题扩充吸引了额外 ${this.stats.pending_user_bonus} 名用户`);
+            this.stats.pending_user_bonus = 0;
         }
         
         u.normal += new_users;
@@ -558,6 +592,17 @@ const game = {
         
         let acad_gap = (this.resources.acad < 0) ? Math.abs(this.resources.acad) : 0;
         let comm_gap = (this.resources.comm < 0) ? Math.abs(this.resources.comm) : 0;
+        
+        // 新增：社区缺口统计
+        if (comm_gap > 0) this.stats.comm_fail_months++;
+        // 新增：每年1月罚款逻辑
+        if (this.date.month === 1 && this.stats.comm_fail_months >= 12 && total_users >= 10000) {
+            let fine = total_users;
+            this.money -= fine;
+            ui.log(`⚖️ 监管通知: 因长期社区维护不善，罚款 ${fine} 元！`, "log-bad");
+            this.stats.comm_fail_months = 0; // 罚款后重置计数
+        }
+
         let server_gap = Math.max(0, load - server_cap);
         let judge_gap = Math.max(0, load - judge_cap);
         
@@ -619,6 +664,13 @@ const game = {
     addProblem: function(type) {
         if (this.resources.acad < GAME_PARAMS.COSTS.ADD_PROBLEM_ACAD) { ui.log("学术不足", "log-bad"); return; }
         this.resources.acad -= GAME_PARAMS.COSTS.ADD_PROBLEM_ACAD;
+        
+        // 新增：搬题奖励记录
+        if (type === 'mid' || type === 'low') {
+            let bonus = Math.floor(Math.random() * 41) + 10; // 10-50
+            this.stats.pending_user_bonus = (this.stats.pending_user_bonus || 0) + bonus;
+        }
+
         if (type === 'high') this.stats.problems.high += 3;
         if (type === 'mid') this.stats.problems.mid += 10;
         if (type === 'low') { this.stats.problems.low += 20; this.stats.reputation -= 0.001; }
@@ -662,13 +714,48 @@ const game = {
         ui.log(`招聘: ${conf.name}`); ui.update();
     },
 
-    expandHardware: function(type) {
-        if (type === 'disk') { this.hardware.disk_extra_blocks++; ui.log("硬件: 硬盘扩容"); ui.update(); return; }
-        let arch = (type === 'server') ? this.hardware.server_arch : this.hardware.judge_arch;
-        let current = (type === 'server') ? this.hardware.server_cores : this.hardware.judge_cores;
-        if (current >= (type==='server'?32:64) * arch) { ui.log("需升级架构", "log-bad"); return; }
-        if (type === 'server') this.hardware.server_cores++; else this.hardware.judge_cores++;
-        ui.log(`硬件: ${type} +1`); ui.update();
+    expandHardware: function(type, mode) {
+        // mode: 1 (default), 10, 'max'
+        mode = mode || 1;
+        
+        if (type === 'disk') {
+            this.hardware.disk_extra_blocks++; 
+            ui.log("硬件: 硬盘扩容"); 
+            ui.update(); 
+            return; 
+        }
+        
+        let isServer = (type === 'server');
+        let arch = isServer ? this.hardware.server_arch : this.hardware.judge_arch;
+        let current = isServer ? this.hardware.server_cores : this.hardware.judge_cores;
+        let limit_base = isServer ? 32 : 64;
+        let limit = limit_base * arch;
+        
+        let count = 0;
+        if (mode === 'max') {
+            count = limit - current;
+        } else {
+            count = mode;
+        }
+        
+        if (count <= 0) {
+            ui.log("已达到架构上限，无法添加", "log-bad");
+            return;
+        }
+        
+        if (current + count > limit) {
+            count = limit - current;
+            if (count <= 0) {
+                 ui.log("核心数已达架构上限，请先升级架构", "log-bad");
+                 return;
+            }
+        }
+        
+        if (isServer) this.hardware.server_cores += count;
+        else this.hardware.judge_cores += count;
+        
+        ui.log(`硬件: ${isServer?'Web':'评测'}核心 +${count}`);
+        ui.update();
     },
 
     upgradeArch: function(type) {
@@ -760,11 +847,26 @@ const ui = {
         let server_arch_bonus = (game.hardware.server_arch - 1) * 100;
         let server_cap_unit = 500 - (game.features_unlocked.team?50:0) - (game.features_unlocked.api?50:0) + server_arch_bonus;
         let s_cap = game.hardware.server_cores * server_cap_unit;
+        
+        // --- 新增开始 ---
+        let judge_arch_bonus = (game.hardware.judge_arch - 1) * 100;
+        let judge_cap_unit = 500 + judge_arch_bonus;
+        let j_cap = game.hardware.judge_cores * judge_cap_unit;
+        // --- 新增结束 ---
+
         let load = Math.floor(u.active + (u.normal/3) + (u.core*3));
         if ([7,8,9,10].includes(game.date.month)) load = Math.floor(load * 1.3);
         
         document.getElementById('disp-server-load').innerText = load;
         document.getElementById('disp-server-cap').innerText = s_cap;
+        document.getElementById('disp-server-load').style.color = (load > s_cap) ? '#ff5252' : '#888'; // 简单的红字警告
+        
+        // --- 新增开始 ---
+        document.getElementById('disp-judge-load').innerText = load;
+        document.getElementById('disp-judge-cap').innerText = j_cap;
+        document.getElementById('disp-judge-load').style.color = (load > j_cap) ? '#ff5252' : '#888'; // 简单的红字警告
+        // --- 新增结束 ---
+
 
         // Forecast
         let salary = 0;
@@ -813,7 +915,12 @@ const ui = {
         document.getElementById('out-rd').innerText = staff.rd_student*h.rd_student.gain + staff.rd_uni*h.rd_uni.gain + staff.rd_full*h.rd_full.gain;
         document.getElementById('out-acad').innerText = staff.acad_part*h.acad_part.gain + staff.acad_full*h.acad_full.gain;
         document.getElementById('out-comm').innerText = staff.comm_part*h.comm_part.gain + staff.comm_full*h.comm_full.gain;
-        
+        // 更新架构升级费用显示
+        let s_lvl = game.hardware.server_arch;
+        let j_lvl = game.hardware.judge_arch;
+        document.getElementById('disp-up-server-cost').innerText = `$${10000*s_lvl} + ${100*s_lvl} 研发`;
+        document.getElementById('disp-up-judge-cost').innerText = `$${10000*j_lvl} + ${100*j_lvl} 研发`;
+
         ui.renderClasses(); // Refresh edu tab for cooldown/level text
     },
     
