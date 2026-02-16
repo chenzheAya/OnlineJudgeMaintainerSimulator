@@ -293,7 +293,8 @@
             </div>
             
             <div class="btn-group" style="margin-top:10px">
-                <button onclick="game.expandHardware('disk')">加硬盘 (+40GB)</button>
+                <button onclick="game.expandHardware('disk', 1)">加硬盘 (+40GB)</button>
+                <button onclick="game.expandHardware('disk', 25)">加硬盘 (+1000GB)</button>
             </div>
         </div>
         <div class="action-card">
@@ -719,11 +720,13 @@ const game = {
         mode = mode || 1;
         
         if (type === 'disk') {
-            this.hardware.disk_extra_blocks++; 
-            ui.log("硬件: 硬盘扩容"); 
+            let count = (typeof mode === 'number') ? mode : 1;
+            this.hardware.disk_extra_blocks += count; 
+            ui.log(`硬件: 硬盘扩容 (+${count * 40}GB)`); 
             ui.update(); 
             return; 
         }
+
         
         let isServer = (type === 'server');
         let arch = isServer ? this.hardware.server_arch : this.hardware.judge_arch;
